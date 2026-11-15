@@ -37,3 +37,6 @@ dist/
 
 # Cache
 .eslintcache
+
+tsconfig.tsbuildinfo
+next-env.d.ts
