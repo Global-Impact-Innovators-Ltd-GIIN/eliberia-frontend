@@ -19,7 +19,7 @@ export default function Login() {
   const { login } = useAuth();
   const router = useRouter();
 
-  const finish = (r: any) => { login(r.token, r.user); router.push(homeFor(r.user.role)); };
+  const finish = (r: any) => { login(r.token, r.user); router.push(r.user.must_change_password ? "/account" : homeFor(r.user.role)); };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

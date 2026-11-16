@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, ChevronRight, Clock, FileText, Fingerprint, Landmark, ScanFace, Users, UserRound, Wallet } from "lucide-react";
 import { CategoryIcon, Skeleton } from "@/components/ui";
 import { api, fmtFormats, money, Service } from "@/lib/api";
+import { ReadAloud } from "@/components/A11y";
+import { RELATIONS, type Member } from "@/components/FamilyPanel";
 import { useAuth } from "@/lib/auth";
 
 export default function ServiceDetail({ params }: { params: { code: string } }) {
@@ -13,16 +15,19 @@ export default function ServiceDetail({ params }: { params: { code: string } }) 
   const [busy, setBusy] = useState(false);
   const [who, setWho] = useState<"me" | "other">("me");
   const [ben, setBen] = useState({ name: "", relation: "Child" });
+  const [members, setMembers] = useState<Member[]>([]);
+  const [memberId, setMemberId] = useState("");
   const { user } = useAuth();
   const router = useRouter();
 
   useEffect(() => { api<Service>(`/api/services/${params.code}`).then(setS).catch((e) => setError(e.message)); }, [params.code]);
+  useEffect(() => { if (user?.role === "citizen") api<Member[]>("/api/family").then(setMembers).catch(() => {}); }, [user]);
 
   async function start() {
     if (!user) return router.push("/login");
     setBusy(true); setError("");
     try {
-      const a = await api(`/api/applications`, { method: "POST", json: { service_code: params.code, beneficiary: who === "other" ? ben : undefined } });
+      const a = await api(`/api/applications`, { method: "POST", json: { service_code: params.code, beneficiary: who !== "other" ? undefined : memberId ? { member_id: Number(memberId) } : ben } });
       router.push(`/applications/${a.id}`);
     } catch (e: any) { setError(e.message); setBusy(false); }
   }
@@ -63,7 +68,8 @@ export default function ServiceDetail({ params }: { params: { code: string } }) 
             <p className="mt-2 text-ink-700">{s.description}</p>
           </section>
           <section className="card">
-            <h2 className="font-bold">What happens</h2>
+            <div className="flex items-center justify-between gap-3"><h2 className="font-bold">What happens</h2>
+              <ReadAloud text={`${s.name}. ${journey.map((j, i) => `Step ${i + 1}: ${j}.`).join(" ")} Documents you need: ${s.required_documents.map((d) => d.name).join(", ") || "none"}.`} /></div>
             <ol className="mt-4 space-y-4">
               {journey.map((j, i) => (
                 <li key={j} className="flex gap-3">
@@ -116,18 +122,24 @@ export default function ServiceDetail({ params }: { params: { code: string } }) 
                     </button>
                   ))}
                 </div>
-                {who === "other" && (
+                {who === "other" && !!members.length && (
+                  <select className="input mt-3" value={memberId} onChange={(e) => setMemberId(e.target.value)} aria-label="Saved family member">
+                    <option value="">Someone not saved yet…</option>
+                    {members.map((m) => <option key={m.id} value={m.id}>{m.full_name} ({m.relation})</option>)}
+                  </select>
+                )}
+                {who === "other" && !memberId && (
                   <div className="mt-3 space-y-2">
                     <input className="input" placeholder="Their full name" value={ben.name} onChange={(e) => setBen({ ...ben, name: e.target.value })} aria-label="Full name of the person" />
                     <select className="input" value={ben.relation} onChange={(e) => setBen({ ...ben, relation: e.target.value })} aria-label="Your relationship">
-                      {["Child", "Parent", "Spouse", "Sibling", "Other"].map((r) => <option key={r}>{r}</option>)}
+                      {RELATIONS.map((r) => <option key={r}>{r}</option>)}
                     </select>
                   </div>
                 )}
               </fieldset>
             )}
             {error && <div className="alert alert-error">{error}</div>}
-            <button className="btn btn-red btn-lg w-full" onClick={start} disabled={busy || (who === "other" && ben.name.trim().length < 3)}>
+            <button className="btn btn-red btn-lg w-full" onClick={start} disabled={busy || (who === "other" && !memberId && ben.name.trim().length < 3)}>
               {busy ? "Starting…" : user ? "Start application" : "Sign in to apply"}
             </button>
             {!user && <p className="muted text-center">New here? <Link className="font-semibold text-navy-800 hover:underline" href="/register">Create an account</Link></p>}

@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlarmClock, Building2, ChevronRight, CircleDollarSign, FolderOpen, Hourglass, Inbox, Landmark, LayoutList, ScrollText, Search, Users } from "lucide-react";
+import { AlarmClock, Building2, ChevronRight, CircleDollarSign, FolderOpen, Hourglass, Inbox, Landmark, LayoutList, Rocket, ScrollText, Search, Users, Wallet } from "lucide-react";
+import { PaymentsPanel, ReadinessPanel } from "@/components/OpsAdmin";
 import { InstitutionProfile, InstitutionsPanel, TeamPanel } from "@/components/OrgAdmin";
 import ServiceAdmin from "@/components/ServiceAdmin";
 import { Skeleton, StatusBadge } from "@/components/ui";
@@ -11,7 +12,7 @@ import { useAuth } from "@/lib/auth";
 
 type Stats = { total: number; overdue: number; by_status: Record<string, number>; by_service?: { name: string; count: number }[]; users?: number; institutions?: number; revenue_usd?: number };
 type Audit = { id: number; user_id: number | null; action: string; detail: string; ip: string; created_at: string };
-type View = "queue" | "services" | "institutions" | "team" | "profile" | "audit";
+type View = "queue" | "services" | "institutions" | "team" | "profile" | "payments" | "readiness" | "audit";
 const TABS = ["", "submitted", "in_review", "info_requested", "biometric_pending", "approved", "ready_for_collection", "completed", "rejected"];
 const OPEN = ["submitted", "in_review"];
 
@@ -46,7 +47,9 @@ export default function Staff() {
     if (isAdmin) v.push(["institutions", "Institutions", Landmark]);
     if (isInstAdmin || can(user, "team")) v.push(["team", "Team", Users]);
     if (isInstAdmin) v.push(["profile", "Our institution", Building2]);
+    if (isInstAdmin || can(user, "finance")) v.push(["payments", "Payments", Wallet]);
     if (can(user, "audit")) v.push(["audit", "Audit log", ScrollText]);
+    if (isAdmin) v.push(["readiness", "Launch readiness", Rocket]);
     return v;
   }, [user, role, isAdmin, isInstAdmin]);
   const active: View | null = view && views.some(([v]) => v === view) ? view : views[0]?.[0] ?? null;
@@ -175,6 +178,8 @@ export default function Staff() {
       {active === "institutions" && <InstitutionsPanel canEdit={can(user, "institutions")} onChange={loadInsts} />}
       {active === "team" && <TeamPanel scope={isAdmin ? "admin" : "institution"} insts={insts} superAdmin={can(user, "all")} />}
       {active === "profile" && <InstitutionProfile />}
+      {active === "payments" && <PaymentsPanel />}
+      {active === "readiness" && <ReadinessPanel superAdmin={can(user, "all")} />}
 
       {active === "audit" && (
         <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">

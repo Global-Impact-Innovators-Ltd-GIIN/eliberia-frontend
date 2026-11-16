@@ -127,6 +127,11 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
             </div>
           </section>
 
+          {a.delivery && (
+            <div className="alert alert-info">
+              <b>Delivery:</b>&nbsp;{a.delivery.method === "collect" ? `collect at ${a.delivery.center}` : `courier to ${a.delivery.address} (${a.delivery.phone})`}
+            </div>
+          )}
           <section className="card">
             <h2 className="font-bold">Submitted details</h2>
             <dl className="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">

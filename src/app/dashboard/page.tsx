@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertCircle, BadgeCheck, Bell, ChevronRight, FilePlus2, FolderOpen, Hourglass } from "lucide-react";
+import ComingUp from "@/components/ComingUp";
 import { Skeleton, StatusBadge } from "@/components/ui";
 import { api, Application, fmtDate, fmtDateTime, homeFor } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -78,7 +79,9 @@ export default function Dashboard() {
             ))}
           </div>
         </section>
-        <aside className="card h-fit">
+        <div className="space-y-6">
+      <ComingUp />
+      <aside className="card h-fit">
           <h2 className="mb-4 flex items-center gap-2 font-bold"><Bell size={17} /> Notifications</h2>
           <ul className="space-y-4">
             {notes.slice(0, 7).map((n) => (
@@ -91,6 +94,7 @@ export default function Dashboard() {
             {!notes.length && <li className="muted">You&apos;re all caught up.</li>}
           </ul>
         </aside>
+      </div>
       </div>
     </div>
   );

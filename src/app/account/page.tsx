@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Download, IdCard, KeyRound, LockKeyhole, LogOut, MonitorSmartphone, UserRound } from "lucide-react";
+import FamilyPanel from "@/components/FamilyPanel";
 import IdentityField from "@/components/IdentityField";
 import { identityState, useIdentityMeta } from "@/lib/identity";
 import { PasswordInput, StrengthMeter, strength } from "@/components/AuthShell";
@@ -47,7 +48,7 @@ export default function Account() {
   }); };
   const changePw = (e: React.FormEvent) => { e.preventDefault(); run(async () => {
     const r = await api("/api/auth/change-password", { method: "POST", json: pw });
-    setToken(r.token); setPw({ current_password: "", new_password: "" });
+    setToken(r.token); login(r.token, { ...user!, must_change_password: false }); setPw({ current_password: "", new_password: "" });
     return "Password changed. Other devices were signed out.";
   }); };
   const saveIdentity = (e: React.FormEvent) => { e.preventDefault(); run(async () => {
@@ -67,6 +68,10 @@ export default function Account() {
     <div className="container-x py-8">
       <h1 className="text-2xl font-extrabold sm:text-3xl">Account &amp; security</h1>
       <p className="muted mt-1">{user.phone} · {user.role}</p>
+      {user.must_change_password && (
+        <div className="alert alert-warn mt-5" role="alert"><KeyRound size={18} className="mt-0.5 shrink-0" />
+          <span><b>Choose your own password to continue.</b> The one you signed in with was set by an administrator. Use it as the current password below.</span></div>
+      )}
       {msg && <div className={`alert mt-5 ${msg.ok ? "alert-ok" : "alert-error"}`} role="status">{msg.text}</div>}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <form onSubmit={saveProfile} className="card space-y-4">
@@ -86,6 +91,8 @@ export default function Account() {
             <StrengthMeter pw={pw.new_password} /></div>
           <button className="btn" disabled={busy || strength(pw.new_password) < 2}>Change password</button>
         </form>
+
+        {user.role === "citizen" && <FamilyPanel />}
 
         {user.role === "citizen" && (
           <form onSubmit={saveIdentity} className="card space-y-4 lg:col-span-2">

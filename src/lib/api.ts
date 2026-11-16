@@ -2,7 +2,7 @@ export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").
 
 export type User = {
   id: number; full_name: string; phone: string; role: "citizen" | "officer" | "admin" | "agent" | "inst_admin";
-  perms?: string[] | null; nationality?: string | null; id_doc_type?: string | null; id_number?: string | null;
+  perms?: string[] | null; must_change_password?: boolean; nationality?: string | null; id_doc_type?: string | null; id_number?: string | null;
   nin?: string; email?: string; county?: string; dob?: string; institution_id?: number;
 };
 export type Field = {
@@ -17,16 +17,18 @@ export type Service = {
   id: number; code: string; name: string; category: string; description: string;
   institution: Institution; fee_usd: number; sla_days: number;
   requires_face: boolean; requires_fingerprint: boolean; required_documents: DocRule[]; form_fields: Field[]; workflow?: Stage[];
+  validity_months?: number | null; renewal_code?: string | null;
 };
 export type AppEvent = { status: string; message: string; actor?: string; created_at: string };
 export type Certificate = {
   number: string; holder_name: string; service_name: string; institution_name: string;
-  issued_at: string; revoked: boolean;
+  issued_at: string; revoked: boolean; expires_at?: string | null; expired?: boolean;
 };
 export type Application = {
   id: number; reference: string; status: string; fee_usd: number; paid: boolean; created_at: string;
   updated_at: string; due_at: string | null; decision_note?: string; bill_id?: string | null;
   beneficiary?: { name: string; relation: string } | null; assisted?: boolean; stage?: StageInfo;
+  delivery?: { method: "collect" | "courier"; center?: string; address?: string; phone?: string; fee_usd?: number } | null;
   service: { id: number; code: string; name: string; institution: string };
   applicant: { id: number; full_name: string; phone: string };
   data?: Record<string, string>; events?: AppEvent[]; service_detail?: Service;
@@ -71,6 +73,13 @@ export const fmtFormats = (r: DocRule) => `${r.formats.map((f) => f.toUpperCase(
 export const money = (n: number) => (n > 0 ? `$${n.toFixed(2)}` : "Free");
 export const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso.endsWith("Z") ? iso : iso + "Z").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "-";
+/** Appointment times are the service center's own clock: show them as written, never shifted to the viewer's time zone. */
+export const fmtSlot = (iso: string) => {
+  const [d, t = ""] = iso.split("T");
+  const [y, m, day] = d.split("-").map(Number);
+  const label = new Date(Date.UTC(y, m - 1, day)).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return `${label}, ${t.slice(0, 5)}`;
+};
 export const fmtDateTime = (iso: string) =>
   new Date(iso.endsWith("Z") ? iso : iso + "Z").toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 

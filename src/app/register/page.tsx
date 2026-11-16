@@ -17,6 +17,7 @@ function RegisterForm() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
+  const [agree, setAgree] = useState(false);
   const boxes = useRef<(HTMLInputElement | null)[]>([]);
   const { login } = useAuth();
   const router = useRouter();
@@ -25,7 +26,7 @@ function RegisterForm() {
   async function register(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError("");
     try {
-      const r = await api("/api/auth/register", { method: "POST", json: { ...f, nin: f.nin || undefined } });
+      const r = await api("/api/auth/register", { method: "POST", json: { ...f, nin: f.nin || undefined, accept_terms: agree } });
       setDevOtp(r.dev_otp || ""); setStep("otp");
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   }
@@ -92,8 +93,12 @@ function RegisterForm() {
           <PasswordInput id="pw" value={f.password} onChange={(v) => setF({ ...f, password: v })} show={show} toggle={() => setShow(!show)} autoComplete="new-password" />
           <StrengthMeter pw={f.password} />
         </div>
+        <label className="flex items-start gap-2.5 text-sm text-ink-700">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-navy-800" checked={agree} onChange={(e) => setAgree(e.target.checked)} required />
+          <span>I have read and accept the <Link href="/terms" target="_blank" className="font-semibold text-navy-800 underline">terms of use</Link> and the <Link href="/privacy" target="_blank" className="font-semibold text-navy-800 underline">privacy notice</Link>.</span>
+        </label>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
-        <button className="btn btn-lg w-full" disabled={busy || strength(f.password) < 2}>{busy ? "Creating…" : "Create account"}</button>
+        <button className="btn btn-lg w-full" disabled={busy || !agree || strength(f.password) < 2}>{busy ? "Creating…" : "Create account"}</button>
         <p className="muted text-center">Already registered? <Link className="font-semibold text-navy-800 hover:underline" href="/login">Sign in</Link></p>
       </form>
     </AuthShell>

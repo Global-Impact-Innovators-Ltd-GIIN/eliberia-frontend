@@ -60,3 +60,10 @@
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* high-contrast reading mode (Reading settings menu) */
+html.hc body { background: #ffffff; }
+html.hc .muted, html.hc .text-ink-500, html.hc .text-ink-700 { color: #0E1726 !important; }
+html.hc .card, html.hc .input, html.hc .chip, html.hc .btn-ghost { border-color: #0E1726 !important; }
+html.hc main a { text-decoration: underline; }
+html.hc .bg-slate-50, html.hc .bg-navy-50 { background-color: #ffffff !important; }

@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, BadgeCheck, CalendarClock, CheckCircle2, Copy, Eye, FileText, LockKeyhole, ScanFace, Send, Sparkles, Star as StarIcon, UploadCloud, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, CalendarClock, CheckCircle2, Copy, Eye, FileText, Loader2, LockKeyhole, ScanFace, Send, Sparkles, Star as StarIcon, Truck, UploadCloud, Wallet, WifiOff } from "lucide-react";
+import SlotPicker from "@/components/SlotPicker";
 import IdentityField from "@/components/IdentityField";
 import FaceCapture from "@/components/FaceCapture";
 import Messages from "@/components/Messages";
 import Timeline from "@/components/Timeline";
 import { Skeleton, StatusBadge, Stepper } from "@/components/ui";
-import { api, Application, DocRule, fmtDate, fmtDateTime, fmtFormats, money } from "@/lib/api";
+import { api, Application, DocRule, fmtDate, fmtDateTime, fmtFormats, fmtSlot, money } from "@/lib/api";
 import { displayAnswer, fieldProblem, useIdentityMeta } from "@/lib/identity";
 
 type Access = { viewer_name: string; viewer_role: string; organisation: string; what: string; created_at: string };
@@ -26,7 +27,17 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   const [method, setMethod] = useState("orange_money");
   const [pending, setPending] = useState("");
   const [centers, setCenters] = useState<string[]>([]);
-  const [appt, setAppt] = useState({ center: "", slot: "" });
+  const [manual, setManual] = useState(true);
+  const [payMsg, setPayMsg] = useState("");
+  const [providers, setProviders] = useState<Record<string, string>>({});
+  const [myAppt, setMyAppt] = useState<{ id: number; center: string; slot: string; status: string } | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [locker, setLocker] = useState<{ id: number; label: string; filename: string; kind: string; size: number }[]>([]);
+  const [keepCopy, setKeepCopy] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [deliv, setDeliv] = useState<{ method: string; center: string; address: string }>({ method: "", center: "", address: "" });
+  const draftKey = `eliberia_draft_${params.id}`;
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [prefilled, setPrefilled] = useState(0);
@@ -40,6 +51,9 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
       return r;
     } catch (e: any) { setError(e.message); }
   }, [params.id]);
+  const refreshAppt = useCallback(() => api<any[]>("/api/applications/appointments/mine")
+    .then((list) => setMyAppt(list.find((x) => x.application_id === Number(params.id) && x.status === "booked") || null))
+    .catch(() => {}), [params.id]);
 
   useEffect(() => {
     if (loading) return;
@@ -53,9 +67,54 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
         if (pre && n) { setData(pre.values); setPrefilled(n); }
       }
       if (user.role === "citizen" && r.status !== "draft") api<Access[]>(`/api/applications/${params.id}/access`).then(setAccess).catch(() => {});
+      if (["draft", "info_requested"].includes(r.status)) { // answers typed while offline, kept on this device
+        try {
+          const local = JSON.parse(localStorage.getItem(draftKey) || "null");
+          if (local?.data && JSON.stringify(local.data) !== JSON.stringify(r.data || {})) { setData(local.data); setRestored(true); }
+        } catch {}
+      }
+      if (r.delivery) setDeliv({ method: r.delivery.method, center: r.delivery.center || "", address: r.delivery.address || "" });
+      if (user.role === "citizen") api<any[]>("/api/locker").then(setLocker).catch(() => {});
+      refreshAppt();
     });
     api<string[]>("/api/centers").then(setCenters).catch(() => {});
-  }, [user, loading, router, load]);
+    api<Record<string, string>>("/api/meta/payments").then(setProviders).catch(() => {});
+  }, [user, loading, router, load, refreshAppt]);
+
+  // keep unsent answers on this device, and send them once the connection is back
+  useEffect(() => {
+    if (!a || !["draft", "info_requested"].includes(a.status)) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ data, at: Date.now() })); } catch {}
+  }, [a, data, draftKey]);
+  useEffect(() => {
+    const back = async () => {
+      setOffline(false);
+      try {
+        const local = JSON.parse(localStorage.getItem(draftKey) || "null");
+        if (local?.data) { await api(`/api/applications/${params.id}`, { method: "PUT", json: { data: local.data } }); setInfo("You are back online. Your answers were saved."); }
+      } catch {}
+    };
+    const gone = () => setOffline(true);
+    window.addEventListener("online", back); window.addEventListener("offline", gone);
+    if (typeof navigator !== "undefined" && !navigator.onLine) setOffline(true);
+    return () => { window.removeEventListener("online", back); window.removeEventListener("offline", gone); };
+  }, [draftKey, params.id]);
+
+  // live payments are confirmed by the provider: keep checking until they are
+  useEffect(() => {
+    if (!pending || manual) return;
+    let tries = 0;
+    const t = setInterval(async () => {
+      tries += 1;
+      try {
+        const p = await api<{ status: string }>(`/api/applications/payments/${pending}/status`);
+        if (p.status === "success") { clearInterval(t); setPending(""); setPayMsg(""); setInfo("Payment received. Thank you."); load(); }
+        else if (p.status === "failed") { clearInterval(t); setPending(""); setPayMsg(""); setError("The payment was not completed. You can try again."); }
+      } catch {}
+      if (tries >= 36) { clearInterval(t); setPayMsg("Still waiting for the provider. You can leave this page; we will notify you when it is confirmed."); }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [pending, manual, load]);
 
   async function run(fn: () => Promise<any>, ok = "") {
     setBusy(true); setError(""); setInfo("");
@@ -80,7 +139,17 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   const docFor = (name: string) => a.documents?.find((d) => d.doc_type === name);
   const docsOk = s.required_documents.every((r) => !r.required || docFor(r.name));
 
-  const save = () => api(`/api/applications/${params.id}`, { method: "PUT", json: { data } });
+  const save = async () => {
+    try {
+      await api(`/api/applications/${params.id}`, { method: "PUT", json: { data } });
+    } catch (e: any) {
+      if (!navigator.onLine || /reach the server/.test(e.message)) {
+        setOffline(true);
+        throw new Error("You are offline. Your answers are kept on this device and will be sent when you reconnect.");
+      }
+      throw e;
+    }
+  };
   const next = async () => {
     if (cur === "Your details") {
       if (problems.length) { setError(problems.slice(0, 3).join(" ")); return; }
@@ -96,21 +165,35 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
     if (!rule.formats.includes(ext)) { setInfo(""); setError(`"${rule.name}" must be a ${rule.formats.map((f) => f.toUpperCase()).join(", ")} file. You chose a .${ext} file.`); return; }
     if (file.size > rule.max_mb * 1024 * 1024) { setInfo(""); setError(`"${rule.name}" must be ${rule.max_mb} MB or smaller. Yours is ${(file.size / 1048576).toFixed(1)} MB.`); return; }
     const fd = new FormData(); fd.append("file", file); fd.append("doc_type", rule.name);
-    return run(() => api(`/api/applications/${params.id}/documents`, { method: "POST", body: fd }), `${rule.name} uploaded`);
+    if (keepCopy) fd.append("save_to_locker", "1");
+    return run(async () => {
+      await api(`/api/applications/${params.id}/documents`, { method: "POST", body: fd });
+      if (keepCopy) api<any[]>("/api/locker").then(setLocker).catch(() => {});
+    }, `${rule.name} uploaded${keepCopy ? " and kept in your locker" : ""}`);
+  };
+  const attach = (rule: DocRule, itemId: string) => {
+    if (!itemId) return;
+    return run(() => api(`/api/applications/${params.id}/documents/from-locker`, { method: "POST", json: { item_id: Number(itemId), doc_type: rule.name } }), `${rule.name} attached from your locker`);
   };
   const pay = () => run(async () => {
     const p = await api(`/api/applications/${params.id}/pay`, { method: "POST", json: { method } });
-    setPending(p.txn_ref);
-  }, method === "agent_cash" ? "Collect the cash, then confirm below." : "A payment prompt was sent to the phone. Approve it, then confirm below.");
+    setManual(p.confirm_by_user !== false); setPayMsg(p.message || ""); setPending(p.txn_ref);
+  });
   const confirm = () => run(async () => {
     await api(`/api/applications/payments/${pending}/confirm`, { method: "POST", json: {} }); setPending("");
   }, "Payment received. Thank you.");
-  const submit = () => run(async () => { await save(); await api(`/api/applications/${params.id}/submit`, { method: "POST" }); }, "Application submitted.");
+  const submit = () => run(async () => {
+    await save(); await api(`/api/applications/${params.id}/submit`, { method: "POST" });
+    try { localStorage.removeItem(draftKey); } catch {}
+  }, "Application submitted.");
   const sendFace = (blob: Blob, liveness: number) => run(async () => {
     const fd = new FormData(); fd.append("kind", "face"); fd.append("liveness", String(liveness)); fd.append("image", blob, "face.jpg");
     await api(`/api/applications/${params.id}/biometrics`, { method: "POST", body: fd });
   }, "Identity verified and sent securely to the agency.");
-  const book = () => run(() => api(`/api/applications/${params.id}/appointments`, { method: "POST", json: appt }), "Appointment booked.");
+  const book = (center: string, slot: string) => run(async () => { await api(`/api/applications/${params.id}/appointments`, { method: "POST", json: { center, slot } }); await refreshAppt(); }, "Appointment booked.");
+  const move = (center: string, slot: string) => run(async () => { await api(`/api/appointments/${myAppt!.id}`, { method: "PUT", json: { center, slot } }); setMoving(false); await refreshAppt(); }, "Appointment moved.");
+  const cancelAppt = () => { if (window.confirm("Cancel this appointment?")) run(async () => { await api(`/api/appointments/${myAppt!.id}/cancel`, { method: "POST" }); await refreshAppt(); }, "Appointment cancelled."); };
+  const saveDelivery = () => run(() => api(`/api/applications/${params.id}/delivery`, { method: "PUT", json: deliv }), "Delivery preference saved.");
   const rate = () => run(() => api(`/api/applications/${params.id}/feedback`, { method: "POST", json: { rating, comment } }), "Thank you for your feedback.");
   const copy = (t: string) => { navigator.clipboard?.writeText(t); setInfo("Copied."); };
 
@@ -133,6 +216,8 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
         <div className="space-y-5 lg:col-span-2">
           {error && <div className="alert alert-error" role="alert">{error}</div>}
           {info && <div className="alert alert-ok" role="status"><CheckCircle2 size={17} className="mt-0.5 shrink-0" /> {info}</div>}
+          {offline && <div className="alert alert-warn" role="status"><WifiOff size={17} className="mt-0.5 shrink-0" /> You are offline. You can keep filling in the form; your answers stay on this device until you reconnect.</div>}
+          {restored && editable && <div className="alert alert-info">We restored answers you typed on this device that had not been sent yet.</div>}
           {a.status === "info_requested" && a.events && (
             <div className="alert alert-warn"><b>The officer asked:</b> {a.events[a.events.length - 1].message}</div>
           )}
@@ -145,7 +230,7 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                   <div className="grid gap-4 sm:grid-cols-2">
                     {prefilled > 0 && (
                       <div className="alert alert-info sm:col-span-2"><Sparkles size={17} className="mt-0.5 shrink-0" />
-                        <span>We filled in {prefilled} answer{prefilled > 1 ? "s" : ""} from your profile and earlier applications. Please check they are still correct.</span></div>
+                        <span>We filled in {prefilled} answer{prefilled > 1 ? "s" : ""} {a.beneficiary ? `from the details saved for ${a.beneficiary.name}` : "from your profile and earlier applications"}. Please check they are still correct.</span></div>
                     )}
                     {s.form_fields.map((f) => f.type === "identity" ? (
                       <div key={f.name} className="sm:col-span-2">
@@ -173,10 +258,13 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                 {cur === "Documents" && (
                   <div className="space-y-3">
                     <p className="muted">{s.institution.name} sets the format and size it accepts for each document.</p>
+                    {user?.role === "citizen" && (
+                      <label className="flex items-center gap-2 text-sm text-ink-700"><input type="checkbox" className="h-4 w-4 accent-navy-800" checked={keepCopy} onChange={(e) => setKeepCopy(e.target.checked)} /> Also keep a copy of new uploads in my document locker</label>
+                    )}
                     {s.required_documents.map((d) => {
                       const up = docFor(d.name);
                       return (
-                        <label key={d.name} className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 border-dashed p-4 transition ${up ? "border-emerald-300 bg-emerald-50/50" : "border-ink-300 hover:border-navy-400 hover:bg-navy-50/50"}`}>
+                        <div key={d.name} className="space-y-1.5"><label className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 border-dashed p-4 transition ${up ? "border-emerald-300 bg-emerald-50/50" : "border-ink-300 hover:border-navy-400 hover:bg-navy-50/50"}`}>
                           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${up ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-ink-500"}`}>{up ? <CheckCircle2 size={20} /> : <UploadCloud size={20} />}</span>
                           <span className="min-w-0 flex-1">
                             <span className="block font-medium">{d.name}{!d.required && <span className="font-normal text-ink-500"> (optional)</span>}</span>
@@ -187,6 +275,16 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                           <input type="file" className="sr-only" accept={d.formats.map((f) => (f === "jpg" ? ".jpg,.jpeg" : `.${f}`)).join(",")} disabled={busy}
                             onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) upload(d, file); }} />
                         </label>
+                        {(() => {
+                          const usable = locker.filter((x) => d.formats.includes(x.kind) && x.size <= d.max_mb * 1048576);
+                          return usable.length ? (
+                            <select className="input !py-2 text-sm" value="" disabled={busy} onChange={(e) => attach(d, e.target.value)} aria-label={`Use a saved document for ${d.name}`}>
+                              <option value="">Or use a saved document from your locker…</option>
+                              {usable.map((x) => <option key={x.id} value={x.id}>{x.label} ({x.filename})</option>)}
+                            </select>
+                          ) : null;
+                        })()}
+                        </div>
                       );
                     })}
                   </div>
@@ -212,8 +310,10 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                           ))}
                         </div>
                         {!pending ? <button className="btn btn-lg" disabled={busy} onClick={pay}><Wallet size={18} /> Pay {money(s.fee_usd)}</button>
-                          : <button className="btn btn-red btn-lg" disabled={busy} onClick={confirm}>{method === "agent_cash" ? "I received the cash" : isAgent ? "The citizen approved the payment" : "I approved the payment on my phone"}</button>}
-                        <p className="muted">Pilot mode: payments are simulated, no money is charged.</p>
+                          : manual ? <button className="btn btn-red btn-lg" disabled={busy} onClick={confirm}>{method === "agent_cash" ? "I received the cash" : isAgent ? "The citizen approved the payment" : "I approved the payment on my phone"}</button>
+                          : <div className="flex items-center gap-2.5 rounded-xl bg-navy-50 p-4 text-sm text-navy-800"><Loader2 size={18} className="shrink-0 animate-spin" /> Waiting for the payment provider to confirm…</div>}
+                        {payMsg && <p className="text-sm text-ink-700">{payMsg}</p>}
+                        {(providers[method] || "mock") === "mock" && method !== "agent_cash" && <p className="muted">Pilot mode: this payment method is simulated and no money is charged.</p>}
                       </>
                     )}
                   </div>
@@ -249,6 +349,43 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                   <div className="mt-4"><Stepper steps={a.stage.names} current={a.status === "submitted" ? -1 : a.stage.index} /></div>
                 </section>
               )}
+              {myAppt && (
+                <section className="card space-y-3">
+                  <h2 className="flex items-center gap-2 font-bold"><CalendarClock size={18} /> Your appointment</h2>
+                  <p className="text-ink-700"><b>{fmtSlot(myAppt.slot)}</b> at {myAppt.center}</p>
+                  <p className="muted">Bring the original documents you uploaded and your reference {a.reference}.</p>
+                  {moving ? <SlotPicker busy={busy} initialCenter={myAppt.center} label="Move appointment" onPick={move} /> : (
+                    <div className="flex gap-2"><button className="btn btn-ghost" onClick={() => setMoving(true)}>Change date or place</button>
+                      <button className="btn btn-ghost !text-flag-700" onClick={cancelAppt} disabled={busy}>Cancel</button></div>
+                  )}
+                </section>
+              )}
+
+              {!["completed", "rejected"].includes(a.status) && (
+                <section className="card space-y-3">
+                  <h2 className="flex items-center gap-2 font-bold"><Truck size={18} /> How do you want to receive it?</h2>
+                  {a.delivery && <p className="muted">Current choice: {a.delivery.method === "collect" ? `collect at ${a.delivery.center}` : `delivery to ${a.delivery.address}`}</p>}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[["collect", "Collect at a center"], ["courier", "Deliver to me"]].map(([v, l]) => (
+                      <button key={v} type="button" aria-pressed={deliv.method === v} onClick={() => setDeliv({ ...deliv, method: v })}
+                        className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${deliv.method === v ? "border-navy-800 bg-navy-50 text-navy-800" : "border-ink-300 text-ink-700 hover:border-navy-400"}`}>{l}</button>
+                    ))}
+                  </div>
+                  {deliv.method === "collect" && (
+                    <select className="input" value={deliv.center} onChange={(e) => setDeliv({ ...deliv, center: e.target.value })} aria-label="Collection center">
+                      <option value="">Choose a center</option>{centers.map((c) => <option key={c}>{c}</option>)}
+                    </select>
+                  )}
+                  {deliv.method === "courier" && (
+                    <>
+                      <textarea className="input" rows={2} placeholder="House, street, community and a landmark" value={deliv.address} onChange={(e) => setDeliv({ ...deliv, address: e.target.value })} maxLength={300} aria-label="Delivery address" />
+                      <p className="muted">A courier fee is paid on delivery. The courier will call {a.applicant.phone} before coming.</p>
+                    </>
+                  )}
+                  {deliv.method && <button className="btn btn-soft" disabled={busy || (deliv.method === "collect" ? !deliv.center : deliv.address.trim().length < 10)} onClick={saveDelivery}>Save preference</button>}
+                </section>
+              )}
+
               {a.certificate && (
                 <div className="card flex flex-wrap items-center gap-4 border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white"><BadgeCheck size={26} /></span>
@@ -264,13 +401,7 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                   <FaceCapture onCapture={sendFace} />
                   <div className="space-y-3 border-t border-slate-100 pt-4">
                     <h3 className="flex items-center gap-2 font-semibold"><CalendarClock size={17} /> Prefer to visit{s.requires_fingerprint ? " (required for fingerprints)" : ""}?</h3>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <select className="input" value={appt.center} onChange={(e) => setAppt({ ...appt, center: e.target.value })} aria-label="Service center">
-                        <option value="">Choose a service center</option>{centers.map((c) => <option key={c}>{c}</option>)}
-                      </select>
-                      <input className="input" type="datetime-local" value={appt.slot} onChange={(e) => setAppt({ ...appt, slot: e.target.value })} aria-label="Date and time" />
-                    </div>
-                    <button className="btn btn-ghost" disabled={busy || !appt.center || !appt.slot} onClick={book}>Book appointment</button>
+                    {myAppt ? <p className="text-sm text-ink-700">You already have an appointment - see below.</p> : <SlotPicker busy={busy} onPick={book} />}
                   </div>
                 </section>
               )}

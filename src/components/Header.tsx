@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { BadgeCheck, ChevronDown, LogOut, Menu, ShieldCheck, UserRound, X } from "lucide-react";
 import Bell from "./Bell";
+import { A11yMenu } from "./A11y";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "./ui";
 
@@ -15,6 +16,9 @@ export default function Header() {
   const [menu, setMenu] = useState(false);
   const staff = user && user.role !== "citizen";
   useEffect(() => { setOpen(false); setMenu(false); }, [path]);
+  useEffect(() => { // a temporary password set by an administrator must be replaced first
+    if (user?.must_change_password && path !== "/account") router.replace("/account");
+  }, [user, path, router]);
 
   const links = [
     { href: "/services", label: "Services" },
@@ -36,6 +40,7 @@ export default function Header() {
           {links.map((l) => <Link key={l.href} href={l.href} className={cls(l.href)}>{l.label}</Link>)}
         </nav>
         <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <A11yMenu />
         {user && <Bell />}
         <div className="hidden items-center gap-2 md:flex">
           {user ? (
