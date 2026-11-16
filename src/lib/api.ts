@@ -23,7 +23,7 @@ export type Application = {
   applicant: { id: number; full_name: string; phone: string };
   data?: Record<string, string>; events?: AppEvent[]; service_detail?: Service;
   documents?: { id: number; doc_type: string; filename: string }[];
-  biometrics?: { id: number; kind: string; status: string; source: string }[];
+  biometrics?: { id: number; kind: string; status: string; source: string; liveness_score?: number; match_score?: number; created_at?: string }[];
   certificate?: Certificate | null; feedback?: { rating: number; comment?: string } | null;
 };
 
