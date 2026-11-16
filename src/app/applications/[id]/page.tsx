@@ -51,6 +51,9 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   if (!a || !a.service_detail) return <div className="container-x grid gap-6 py-10 lg:grid-cols-3"><Skeleton className="h-96 lg:col-span-2" /><Skeleton className="h-64" /></div>;
 
   const s = a.service_detail;
+  const isAgent = user?.role === "agent";
+  const methods = [["orange_money", "Orange Money", "bg-orange-500"], ["mtn_momo", "MTN MoMo", "bg-yellow-400"],
+    ...(isAgent ? [["agent_cash", "Cash", "bg-emerald-500"]] : [])];
   const editable = ["draft", "info_requested"].includes(a.status);
   const hasFee = s.fee_usd > 0;
   const steps = ["Your details", ...(s.required_documents.length ? ["Documents"] : []), ...(hasFee ? ["Payment"] : []), "Review"];
@@ -76,7 +79,7 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   const pay = () => run(async () => {
     const p = await api(`/api/applications/${params.id}/pay`, { method: "POST", json: { method } });
     setPending(p.txn_ref);
-  }, "A payment prompt was sent to your phone. Approve it, then confirm below.");
+  }, method === "agent_cash" ? "Collect the cash, then confirm below." : "A payment prompt was sent to the phone. Approve it, then confirm below.");
   const confirm = () => run(async () => {
     await api(`/api/applications/payments/${pending}/confirm`, { method: "POST", json: {} }); setPending("");
   }, "Payment received. Thank you.");
@@ -91,7 +94,8 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
 
   return (
     <div className="container-x py-8">
-      <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-navy-800"><ArrowLeft size={15} /> My applications</Link>
+      <Link href={isAgent ? "/agent" : "/dashboard"} className="inline-flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-navy-800"><ArrowLeft size={15} /> {isAgent ? "Agent desk" : "My applications"}</Link>
+      {isAgent && <div className="alert alert-info mt-3">You are completing this application on behalf of <b>{a.applicant.full_name}</b> ({a.applicant.phone}) with their consent.</div>}
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold sm:text-3xl">{s.name}</h1>
@@ -159,15 +163,15 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                     ) : (
                       <>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          {[["orange_money", "Orange Money", "bg-orange-500"], ["mtn_momo", "MTN MoMo", "bg-yellow-400"]].map(([v, l, dot]) => (
+                          {methods.map(([v, l, dot]) => (
                             <button key={v} type="button" onClick={() => setMethod(v)} aria-pressed={method === v}
                               className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${method === v ? "border-navy-800 bg-navy-50 ring-2 ring-navy-100" : "border-ink-300 hover:border-navy-400"}`}>
-                              <span className={`h-9 w-9 rounded-full ${dot}`} /><span><span className="block font-semibold">{l}</span><span className="muted">Prompt sent to {user?.phone}</span></span>
+                              <span className={`h-9 w-9 rounded-full ${dot}`} /><span><span className="block font-semibold">{l}</span><span className="muted">{v === "agent_cash" ? "Collected by you, the agent" : `Prompt sent to ${a.applicant.phone}`}</span></span>
                             </button>
                           ))}
                         </div>
                         {!pending ? <button className="btn btn-lg" disabled={busy} onClick={pay}><Wallet size={18} /> Pay {money(s.fee_usd)}</button>
-                          : <button className="btn btn-red btn-lg" disabled={busy} onClick={confirm}>I approved the payment on my phone</button>}
+                          : <button className="btn btn-red btn-lg" disabled={busy} onClick={confirm}>{method === "agent_cash" ? "I received the cash" : isAgent ? "The citizen approved the payment" : "I approved the payment on my phone"}</button>}
                         <p className="muted">Pilot mode: payments are simulated, no money is charged.</p>
                       </>
                     )}
@@ -233,7 +237,7 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                 {!!a.documents?.length && <ul className="mt-4 flex flex-wrap gap-2">{a.documents.map((d) => <li key={d.id} className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs"><FileText size={13} /> {d.filename}</li>)}</ul>}
               </section>
 
-              {["approved", "ready_for_collection", "completed", "rejected"].includes(a.status) && (
+              {!isAgent && ["approved", "ready_for_collection", "completed", "rejected"].includes(a.status) && (
                 <section className="card">
                   <h2 className="font-bold">How was this service?</h2>
                   {a.feedback ? <p className="muted mt-1">You rated it {a.feedback.rating}/5. Thank you!</p> : (

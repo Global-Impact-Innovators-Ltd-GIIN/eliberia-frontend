@@ -13,14 +13,26 @@ export default function Staff() {
   const [stats, setStats] = useState<any>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [member, setMember] = useState({ full_name: "", phone: "", password: "", role: "agent", institution_id: "" });
+  const [insts, setInsts] = useState<{ id: number; name: string }[]>([]);
+  const [memberMsg, setMemberMsg] = useState("");
+  async function addMember(e: React.FormEvent) {
+    e.preventDefault(); setMemberMsg("");
+    try {
+      const u = await api("/api/admin/officers", { method: "POST", json: { ...member, institution_id: member.institution_id ? Number(member.institution_id) : undefined } });
+      setMemberMsg(`${u.full_name} added as ${u.role}.`); setMember({ ...member, full_name: "", phone: "", password: "" });
+    } catch (e: any) { setMemberMsg(e.message); }
+  }
 
   useEffect(() => {
     if (loading) return;
-    if (!user || user.role === "citizen") { router.push("/login"); return; }
+    if (!user) { router.push("/login"); return; }
+    if (user.role !== "officer" && user.role !== "admin") { router.push(user.role === "agent" ? "/agent" : "/dashboard"); return; }
     api("/api/admin/stats").then(setStats).catch(() => {});
+    if (user.role === "admin") api("/api/institutions").then(setInsts).catch(() => {});
   }, [user, loading, router]);
   useEffect(() => {
-    if (!user || user.role === "citizen") return;
+    if (!user || (user.role !== "officer" && user.role !== "admin")) return;
     api<Application[]>(`/api/staff/applications?status=${status}`).then(setApps).catch((e) => setError(e.message));
   }, [user, status]);
 
@@ -50,6 +62,22 @@ export default function Staff() {
         ))}
         {!apps.length && <p className="text-slate-500">Nothing in the queue.</p>}
       </div>
+      {user?.role === "admin" && (
+        <form onSubmit={addMember} className="card space-y-3">
+          <h2 className="font-bold">Add an agent or officer</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <select className="input" value={member.role} onChange={(e) => setMember({ ...member, role: e.target.value })} aria-label="Role"><option value="agent">Agent</option><option value="officer">Officer</option></select>
+            <input className="input" placeholder="Full name" value={member.full_name} onChange={(e) => setMember({ ...member, full_name: e.target.value })} required minLength={3} />
+            <input className="input" placeholder="Phone (0770…)" inputMode="tel" value={member.phone} onChange={(e) => setMember({ ...member, phone: e.target.value })} required />
+            <input className="input" type="password" placeholder="Temporary password" autoComplete="new-password" value={member.password} onChange={(e) => setMember({ ...member, password: e.target.value })} required minLength={8} />
+            {member.role === "officer"
+              ? <select className="input" value={member.institution_id} onChange={(e) => setMember({ ...member, institution_id: e.target.value })} required aria-label="Institution"><option value="">Institution…</option>{insts.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select>
+              : <button className="btn">Add agent</button>}
+          </div>
+          {member.role === "officer" && <button className="btn">Add officer</button>}
+          {memberMsg && <p className="muted" role="status">{memberMsg}</p>}
+        </form>
+      )}
     </div>
   );
 }

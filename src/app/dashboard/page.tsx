@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertCircle, BadgeCheck, Bell, ChevronRight, FilePlus2, FolderOpen, Hourglass } from "lucide-react";
 import { Skeleton, StatusBadge } from "@/components/ui";
-import { api, Application, fmtDate, fmtDateTime } from "@/lib/api";
+import { api, Application, fmtDate, fmtDateTime, homeFor } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 type Note = { id: number; title: string; body: string; read: boolean; created_at: string };
@@ -21,7 +21,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (loading) return;
     if (!user) { router.push("/login"); return; }
-    if (user.role !== "citizen") { router.push("/staff"); return; }
+    if (user.role !== "citizen") { router.push(homeFor(user.role)); return; }
     api<Application[]>("/api/applications").then(setApps).catch((e) => { setError(e.message); setApps([]); });
     api<Note[]>("/api/notifications").then(setNotes).catch(() => {});
   }, [user, loading, router]);
@@ -67,7 +67,8 @@ export default function Dashboard() {
             {list.map((a) => (
               <Link key={a.id} href={`/applications/${a.id}`} className="card card-hover flex items-center gap-4 !p-4">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{a.service.name}{a.beneficiary ? <span className="font-normal text-ink-500"> · for {a.beneficiary.name}</span> : null}</div>
+                  <div className="truncate font-semibold">{a.service.name}{a.beneficiary ? <span className="font-normal text-ink-500"> · for {a.beneficiary.name}</span> : null}
+                    {a.assisted && <span className="ml-2 rounded-full bg-navy-50 px-2 py-0.5 text-[11px] font-semibold text-navy-800">Agent assisted</span>}</div>
                   <div className="muted truncate">{a.reference} · {a.service.institution} · {fmtDate(a.created_at)}</div>
                   {ACTION.includes(a.status) && <div className="mt-1 text-xs font-semibold text-amber-700">{a.status === "draft" ? "Finish and submit" : a.status === "biometric_pending" ? "Complete your identity check" : "The officer needs more information"}</div>}
                 </div>

@@ -28,7 +28,8 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
   const load = useCallback(() => api<Application>(`/api/staff/applications/${params.id}`).then(setA).catch((e) => setError(e.message)), [params.id]);
   useEffect(() => {
     if (loading) return;
-    if (!user || user.role === "citizen") { router.push("/login"); return; }
+    if (!user) { router.push("/login"); return; }
+    if (user.role !== "officer" && user.role !== "admin") { router.push(user.role === "agent" ? "/agent" : "/dashboard"); return; }
     load();
   }, [user, loading, router, load]);
 

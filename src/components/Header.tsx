@@ -19,7 +19,8 @@ export default function Header() {
     { href: "/services", label: "Services" },
     { href: "/track", label: "Track application" },
     { href: "/verify", label: "Verify certificate" },
-    ...(user ? [{ href: staff ? "/staff" : "/dashboard", label: staff ? "Staff desk" : "My applications" }] : []),
+    ...(user ? [user.role === "agent" ? { href: "/agent", label: "Agent desk" }
+      : { href: staff ? "/staff" : "/dashboard", label: staff ? "Staff desk" : "My applications" }] : []),
   ];
   const cls = (href: string) =>
     `rounded-lg px-3 py-2 text-sm font-medium transition ${path.startsWith(href) ? "bg-navy-50 text-navy-800" : "text-ink-700 hover:bg-slate-100 hover:text-ink-900"}`;

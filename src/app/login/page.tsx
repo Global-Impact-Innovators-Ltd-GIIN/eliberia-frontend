@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AuthShell, { PasswordInput } from "@/components/AuthShell";
-import { api } from "@/lib/api";
+import { api, homeFor } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export default function Login() {
@@ -21,7 +21,7 @@ export default function Login() {
     try {
       const r = await api("/api/auth/login", { method: "POST", json: { phone, password } });
       login(r.token, r.user);
-      router.push(r.user.role === "citizen" ? "/dashboard" : "/staff");
+      router.push(homeFor(r.user.role));
     } catch (e: any) {
       setError(e.message);
       if (e.status === 403) router.push(`/register?verify=${encodeURIComponent(phone)}`);
@@ -39,7 +39,8 @@ export default function Login() {
           </div>
         </div>
         <div>
-          <label className="label" htmlFor="pw">Password</label>
+          <div className="flex items-baseline justify-between"><label className="label" htmlFor="pw">Password</label>
+            <Link href="/forgot" className="text-xs font-semibold text-navy-800 hover:underline">Forgot password?</Link></div>
           <PasswordInput id="pw" value={password} onChange={setPassword} show={show} toggle={() => setShow(!show)} autoComplete="current-password" />
         </div>
         {error && <div className="alert alert-error" role="alert">{error}</div>}

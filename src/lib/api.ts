@@ -1,7 +1,7 @@
 export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").trim();
 
 export type User = {
-  id: number; full_name: string; phone: string; role: "citizen" | "officer" | "admin";
+  id: number; full_name: string; phone: string; role: "citizen" | "officer" | "admin" | "agent";
   nin?: string; email?: string; county?: string; dob?: string; institution_id?: number;
 };
 export type Field = { name: string; label: string; type: string; required: boolean; options?: string[] };
@@ -18,7 +18,7 @@ export type Certificate = {
 export type Application = {
   id: number; reference: string; status: string; fee_usd: number; paid: boolean; created_at: string;
   updated_at: string; due_at: string | null; decision_note?: string; bill_id?: string | null;
-  beneficiary?: { name: string; relation: string } | null;
+  beneficiary?: { name: string; relation: string } | null; assisted?: boolean;
   service: { id: number; code: string; name: string; institution: string };
   applicant: { id: number; full_name: string; phone: string };
   data?: Record<string, string>; events?: AppEvent[]; service_detail?: Service;
@@ -55,6 +55,7 @@ export async function api<T = any>(path: string, opts: RequestInit & { json?: un
   return data as T;
 }
 
+export const homeFor = (role: User["role"]) => (role === "citizen" ? "/dashboard" : role === "agent" ? "/agent" : "/staff");
 export const money = (n: number) => (n > 0 ? `$${n.toFixed(2)}` : "Free");
 export const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso.endsWith("Z") ? iso : iso + "Z").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "-";
