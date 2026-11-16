@@ -9,12 +9,14 @@ export type Field = {
   name: string; label: string; type: string; required: boolean; options?: string[];
   help?: string; max_length?: number; doc_types?: string[]; countries?: string[];
 };
+export type Stage = { name: string; instructions: string; separate_officer: boolean; requires_admin: boolean };
+export type StageInfo = { index: number; total: number; name: string; instructions: string; names: string[] };
 export type DocRule = { name: string; formats: string[]; max_mb: number; required: boolean; note: string };
 export type Institution = { id: number; code: string; name: string; description?: string; guidelines?: string; contact_phone?: string; contact_email?: string };
 export type Service = {
   id: number; code: string; name: string; category: string; description: string;
   institution: Institution; fee_usd: number; sla_days: number;
-  requires_face: boolean; requires_fingerprint: boolean; required_documents: DocRule[]; form_fields: Field[];
+  requires_face: boolean; requires_fingerprint: boolean; required_documents: DocRule[]; form_fields: Field[]; workflow?: Stage[];
 };
 export type AppEvent = { status: string; message: string; actor?: string; created_at: string };
 export type Certificate = {
@@ -24,7 +26,7 @@ export type Certificate = {
 export type Application = {
   id: number; reference: string; status: string; fee_usd: number; paid: boolean; created_at: string;
   updated_at: string; due_at: string | null; decision_note?: string; bill_id?: string | null;
-  beneficiary?: { name: string; relation: string } | null; assisted?: boolean;
+  beneficiary?: { name: string; relation: string } | null; assisted?: boolean; stage?: StageInfo;
   service: { id: number; code: string; name: string; institution: string };
   applicant: { id: number; full_name: string; phone: string };
   data?: Record<string, string>; events?: AppEvent[]; service_detail?: Service;

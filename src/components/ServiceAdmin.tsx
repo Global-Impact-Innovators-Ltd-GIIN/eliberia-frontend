@@ -2,17 +2,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Skeleton } from "@/components/ui";
-import { api, DocRule, Field, money, Service } from "@/lib/api";
+import { api, DocRule, Field, money, Service, Stage } from "@/lib/api";
 
 type Row = Service & { active: boolean; institution_id: number };
 type FieldDraft = { name: string; label: string; type: string; required: boolean; opts: string; help: string; docMode: string; home: boolean };
 type Draft = {
   code: string; name: string; category: string; institution_id: string; fee_usd: string; sla_days: string;
   description: string; requires_face: boolean; requires_fingerprint: boolean; active: boolean;
-  docs: DocRule[]; fields: FieldDraft[];
+  docs: DocRule[]; fields: FieldDraft[]; stages: Stage[];
 };
 const EMPTY: Draft = { code: "", name: "", category: "", institution_id: "", fee_usd: "0", sla_days: "5", description: "",
-  requires_face: false, requires_fingerprint: false, active: true, docs: [], fields: [] };
+  requires_face: false, requires_fingerprint: false, active: true, docs: [], fields: [], stages: [] };
 const TYPES: [string, string][] = [["text", "Short text"], ["number", "Number"], ["date", "Date"], ["select", "Choice list"],
   ["email", "Email"], ["phone", "Phone number"], ["country", "Country"], ["identity", "Identity document"]];
 const NEW_DOC: DocRule = { name: "", formats: ["pdf", "jpg", "png"], max_mb: 5, required: true, note: "" };
@@ -48,7 +48,8 @@ export default function ServiceAdmin({ insts, scope = "admin" }: { insts: { id: 
     if (!r) { setD(EMPTY); setEditing(""); return; }
     setD({ code: r.code, name: r.name, category: r.category, institution_id: String(r.institution_id), fee_usd: String(r.fee_usd),
       sla_days: String(r.sla_days), description: r.description, requires_face: r.requires_face, requires_fingerprint: r.requires_fingerprint,
-      active: r.active, docs: r.required_documents.map((x) => ({ ...x })), fields: r.form_fields.map(toDraft) });
+      active: r.active, docs: r.required_documents.map((x) => ({ ...x })), fields: r.form_fields.map(toDraft),
+      stages: (r.workflow || []).length === 1 && r.workflow![0].name === "Review" && !r.workflow![0].instructions ? [] : (r.workflow || []).map((x) => ({ ...x })) });
     setEditing(r.code);
   }
   async function save(e: React.FormEvent) {
@@ -56,7 +57,7 @@ export default function ServiceAdmin({ insts, scope = "admin" }: { insts: { id: 
     const body = {
       code: d.code, name: d.name, category: d.category, institution_id: Number(d.institution_id) || undefined, fee_usd: Number(d.fee_usd), sla_days: Number(d.sla_days),
       description: d.description, requires_face: d.requires_face, requires_fingerprint: d.requires_fingerprint, active: d.active,
-      required_documents: d.docs, form_fields: d.fields.map(fromDraft),
+      required_documents: d.docs, form_fields: d.fields.map(fromDraft), workflow: d.stages,
     };
     try {
       await api(editing ? `${base}/${editing}` : base, { method: editing ? "PUT" : "POST", json: body });
@@ -65,6 +66,7 @@ export default function ServiceAdmin({ insts, scope = "admin" }: { insts: { id: 
   }
   const setField = (i: number, patch: Partial<FieldDraft>) => setD({ ...d, fields: d.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
   const setDoc = (i: number, patch: Partial<DocRule>) => setD({ ...d, docs: d.docs.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+  const setStage = (i: number, patch: Partial<Stage>) => setD({ ...d, stages: d.stages.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const toggleFormat = (i: number, fmt: string) => {
     const cur = d.docs[i].formats;
     setDoc(i, { formats: cur.includes(fmt) ? cur.filter((x) => x !== fmt) : [...cur, fmt] });
@@ -155,6 +157,32 @@ export default function ServiceAdmin({ insts, scope = "admin" }: { insts: { id: 
         </div>
       </fieldset>
 
+      <fieldset>
+        <div className="flex items-center justify-between">
+          <legend className="font-bold">How your office reviews it</legend>
+          <button type="button" className="btn btn-soft !py-1.5" disabled={d.stages.length >= 8}
+            onClick={() => setD({ ...d, stages: [...d.stages, { name: "", instructions: "", separate_officer: false, requires_admin: false }] })}><Plus size={15} /> Add stage</button>
+        </div>
+        <p className="muted">List the steps an application goes through in your office, in order. Approval happens at the last stage. Leave empty for a single review.</p>
+        <ol className="mt-3 space-y-3">
+          {d.stages.map((x, i) => (
+            <li key={i} className="space-y-2 rounded-xl bg-slate-50 p-3">
+              <div className="grid items-center gap-2 sm:grid-cols-[2rem_1fr_auto]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy-800 text-xs font-bold text-white">{i + 1}</span>
+                <input className="input" placeholder="Stage name, e.g. Document check" value={x.name} onChange={(e) => setStage(i, { name: e.target.value })} required minLength={2} maxLength={60} aria-label="Stage name" />
+                <button type="button" className="rounded-lg p-2 text-flag-700 hover:bg-flag-50" onClick={() => setD({ ...d, stages: d.stages.filter((_, j) => j !== i) })} aria-label="Remove stage"><Trash2 size={16} /></button>
+              </div>
+              <input className="input" placeholder="What the officer should check at this stage (optional)" value={x.instructions} onChange={(e) => setStage(i, { instructions: e.target.value })} maxLength={300} aria-label="Instructions" />
+              <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                {i > 0 && <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-navy-800" checked={x.separate_officer} onChange={(e) => setStage(i, { separate_officer: e.target.checked })} /> Must be a different officer from the previous stage</label>}
+                <label className="flex items-center gap-2"><input type="checkbox" className="h-4 w-4 accent-navy-800" checked={x.requires_admin} onChange={(e) => setStage(i, { requires_admin: e.target.checked })} /> Only the institution administrator can complete it</label>
+              </div>
+            </li>
+          ))}
+          {!d.stages.length && <li className="muted">One stage: an officer reviews and decides.</li>}
+        </ol>
+      </fieldset>
+
       {msg && !msg.ok && <div className="alert alert-error" role="alert">{msg.text}</div>}
       <div className="flex gap-2"><button className="btn" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Create service"}</button>
         <button type="button" className="btn btn-ghost" onClick={() => setEditing(null)}>Cancel</button></div>
@@ -177,7 +205,7 @@ export default function ServiceAdmin({ insts, scope = "admin" }: { insts: { id: 
           {list.map((r) => (
             <li key={r.code} className="flex items-center gap-4 px-5 py-3">
               <div className="min-w-0 flex-1"><div className="truncate font-semibold">{r.name}</div>
-                <div className="muted truncate">{r.category}{scope === "admin" ? ` · ${r.institution.name}` : ""} · {r.form_fields.length} questions · {r.required_documents.length} documents</div></div>
+                <div className="muted truncate">{r.category}{scope === "admin" ? ` · ${r.institution.name}` : ""} · {r.form_fields.length} questions · {r.required_documents.length} documents · {(r.workflow || []).length} review stage{(r.workflow || []).length === 1 ? "" : "s"}</div></div>
               <span className="hidden text-sm text-ink-500 sm:block">{r.sla_days} days</span>
               <span className="w-16 text-right text-sm font-bold text-navy-800">{money(r.fee_usd)}</span>
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.active ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-ink-500"}`}>{r.active ? "Live" : "Hidden"}</span>

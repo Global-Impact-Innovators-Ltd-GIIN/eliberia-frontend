@@ -3,9 +3,9 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import Timeline from "@/components/Timeline";
 import { StatusBadge } from "@/components/ui";
-import { api, AppEvent, fmtDate, money } from "@/lib/api";
+import { api, AppEvent, fmtDate, money, StageInfo } from "@/lib/api";
 
-type Res = { reference: string; service: string; institution: string; status: string; paid: boolean; fee_usd: number; due_at: string | null; events: AppEvent[] };
+type Res = { reference: string; service: string; institution: string; status: string; paid: boolean; fee_usd: number; due_at: string | null; events: AppEvent[]; stage?: StageInfo };
 
 export default function Track() {
   const [ref, setRef] = useState("");
@@ -41,6 +41,9 @@ export default function Track() {
               <div className="rounded-xl bg-slate-50 p-3"><div className="text-ink-500">Payment</div><div className="font-semibold">{res.fee_usd > 0 ? `${money(res.fee_usd)} · ${res.paid ? "paid" : "unpaid"}` : "Free"}</div></div>
               <div className="rounded-xl bg-slate-50 p-3"><div className="text-ink-500">Expected by</div><div className="font-semibold">{fmtDate(res.due_at)}</div></div>
             </div>
+            {res.status === "in_review" && res.stage && res.stage.total > 1 && (
+              <div className="alert alert-info">Stage {res.stage.index + 1} of {res.stage.total}: <b>{res.stage.name}</b></div>
+            )}
             <Timeline events={res.events} />
           </div>
         )}

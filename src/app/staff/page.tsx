@@ -145,7 +145,8 @@ export default function Staff() {
                         <div className="min-w-0"><div className="truncate font-semibold">{a.applicant.full_name}</div><div className="muted truncate">{a.applicant.phone}{a.assisted ? " · agent assisted" : ""}</div></div>
                         <div className="order-3 col-span-2 min-w-0 md:order-none md:col-span-1"><div className="truncate text-sm font-medium">{a.service.name}</div><div className="muted truncate font-mono text-xs">{a.reference}{isAdmin ? ` · ${a.service.institution}` : ""}</div></div>
                         <div className={`order-4 text-sm md:order-none ${d.late ? "font-semibold text-flag-700" : "text-ink-700"}`}>{d.text}</div>
-                        <div className="justify-self-end"><StatusBadge status={a.status} /></div>
+                        <div className="justify-self-end text-right"><StatusBadge status={a.status} />
+                          {a.status === "in_review" && a.stage && a.stage.total > 1 && <div className="mt-1 text-[11px] font-medium text-ink-500">Stage {a.stage.index + 1}/{a.stage.total} · {a.stage.name}</div>}</div>
                         <ChevronRight size={17} className="hidden text-ink-500 md:block" />
                       </Link>
                     </li>

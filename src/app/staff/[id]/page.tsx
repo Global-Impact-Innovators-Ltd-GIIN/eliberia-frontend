@@ -84,7 +84,19 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
   const labelOf = (k: string) => fields.find((f) => f.name === k)?.label || k.replace(/_/g, " ");
   const faceOk = a.biometrics?.some((b) => b.kind === "face" && b.status === "dispatched");
   const needsFace = s?.requires_face && !faceOk;
-  const actions = ACTIONS[a.status] || [];
+  const st = a.stage;
+  const multi = !!st && st.total > 1;
+  const lastStage = !st || st.index >= st.total - 1;
+  let actions = ACTIONS[a.status] || [];
+  if (a.status === "in_review" && multi && st) {
+    const rest = actions.filter((x) => x.action !== "approve" && x.action !== "reject");
+    actions = [
+      lastStage ? actions[0] : { action: "advance", label: `Complete "${st.name}"`, hint: `Passes it on to: ${st.names[st.index + 1]}`, note: "optional" },
+      ...rest,
+      ...(st.index > 0 ? [{ action: "send_back", label: "Send back a stage", hint: `Returns it to: ${st.names[st.index - 1]}`, note: "required", tone: "ghost" } as Act] : []),
+      actions[actions.length - 1],
+    ];
+  }
   const late = a.due_at && ["submitted", "in_review"].includes(a.status) && new Date(a.due_at + "Z").getTime() < Date.now();
 
   return (
@@ -163,6 +175,22 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
         <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
           <section className="card space-y-3">
             <h2 className="font-bold">Decision</h2>
+            {multi && st && ["in_review", "submitted", "info_requested", "biometric_pending"].includes(a.status) && (
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-ink-500">Your office's stages</div>
+                <ol className="mt-2 space-y-1.5">
+                  {st.names.map((n, k) => {
+                    const done = a.status !== "submitted" && k < st.index, on = a.status !== "submitted" && k === st.index;
+                    return (
+                      <li key={n} className={`flex items-center gap-2 text-sm ${on ? "font-semibold text-ink-900" : done ? "text-emerald-700" : "text-ink-500"}`}>
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${done ? "bg-emerald-500 text-white" : on ? "bg-navy-800 text-white" : "bg-slate-200"}`}>{done ? "✓" : k + 1}</span>{n}
+                      </li>
+                    );
+                  })}
+                </ol>
+                {a.status === "in_review" && st.instructions && <p className="mt-2 border-t border-slate-200 pt-2 text-sm text-ink-700"><b>At this stage:</b> {st.instructions}</p>}
+              </div>
+            )}
             {a.certificate && (
               <Link href={`/verify/${a.certificate.number}`} className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100"><BadgeCheck size={17} /> Certificate {a.certificate.number}</Link>
             )}
@@ -181,12 +209,13 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
             {actions.length ? (
               <>
                 {a.status === "in_review" && needsFace && <div className="alert alert-warn">A face check is required before you can approve.</div>}
-                {actions.some((x) => x.note) && (
+                {actions.some((x) => x?.note) && (
                   <div><label className="label" htmlFor="note">Note to the applicant</label>
                     <textarea id="note" className="input" rows={3} placeholder="Required to reject or ask for information" value={note} onChange={(e) => { setNote(e.target.value); setConfirmReject(false); }} maxLength={280} /></div>
                 )}
                 <div className="space-y-2">
                   {actions.map((x) => {
+                    if (!x) return null;
                     const blocked = x.action === "approve" && needsFace;
                     const label = x.action === "reject" && confirmReject ? "Click again to confirm rejection" : x.label;
                     return (

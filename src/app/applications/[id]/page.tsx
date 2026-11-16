@@ -242,6 +242,13 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
             </div>
           ) : (
             <>
+              {a.stage && a.stage.total > 1 && ["submitted", "in_review", "info_requested", "biometric_pending"].includes(a.status) && (
+                <section className="card">
+                  <h2 className="font-bold">Where it is at {s.institution.name}</h2>
+                  <p className="muted mt-1">{a.status === "submitted" ? "Waiting for an officer to pick it up." : `Stage ${a.stage.index + 1} of ${a.stage.total}: ${a.stage.name}`}</p>
+                  <div className="mt-4"><Stepper steps={a.stage.names} current={a.status === "submitted" ? -1 : a.stage.index} /></div>
+                </section>
+              )}
               {a.certificate && (
                 <div className="card flex flex-wrap items-center gap-4 border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
                   <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white"><BadgeCheck size={26} /></span>
