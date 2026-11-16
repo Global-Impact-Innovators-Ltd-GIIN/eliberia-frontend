@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, BadgeCheck, CalendarClock, CheckCircle2, Copy, FileText, ScanFace, Send, Star as StarIcon, UploadCloud, Wallet } from "lucide-react";
 import FaceCapture from "@/components/FaceCapture";
+import Messages from "@/components/Messages";
 import Timeline from "@/components/Timeline";
 import { Skeleton, StatusBadge, Stepper } from "@/components/ui";
 import { api, Application, fmtDate, money } from "@/lib/api";
@@ -237,6 +238,8 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                 {!!a.documents?.length && <ul className="mt-4 flex flex-wrap gap-2">{a.documents.map((d) => <li key={d.id} className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs"><FileText size={13} /> {d.filename}</li>)}</ul>}
               </section>
 
+              <Messages appId={a.id} title={`Messages with ${s.institution.code}`} />
+
               {!isAgent && ["approved", "ready_for_collection", "completed", "rejected"].includes(a.status) && (
                 <section className="card">
                   <h2 className="font-bold">How was this service?</h2>
@@ -268,6 +271,7 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
             <div className="flex justify-between"><span className="text-ink-500">Fee</span><b>{money(s.fee_usd)}{hasFee ? (a.paid ? " · paid" : " · unpaid") : ""}</b></div>
             {a.bill_id && <div className="flex justify-between"><span className="text-ink-500">Bill ID</span><b className="font-mono">{a.bill_id}</b></div>}
             {a.due_at && <div className="flex justify-between"><span className="text-ink-500">Expected by</span><b>{fmtDate(a.due_at)}</b></div>}
+            {hasFee && a.paid && <Link href={`/receipts/${a.id}`} className="btn btn-soft mt-2 w-full">View payment receipt</Link>}
           </div>
         </aside>
       </div>

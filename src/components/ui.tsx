@@ -1,5 +1,5 @@
 import {
-  Baby, Briefcase, Car, Fingerprint, Landmark, MapPinned, Plane, Receipt, Scale, Zap, Check, type LucideIcon,
+  Baby, Briefcase, Car, Fingerprint, GraduationCap, HardHat, HeartHandshake, Landmark, Leaf, MapPinned, Plane, Receipt, Scale, Stamp, Zap, Check, type LucideIcon,
 } from "lucide-react";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/api";
 
@@ -13,6 +13,11 @@ const CAT: Record<string, { icon: LucideIcon; tint: string }> = {
   Civil: { icon: Baby, tint: "bg-pink-50 text-pink-700" },
   Land: { icon: MapPinned, tint: "bg-lime-50 text-lime-700" },
   Utilities: { icon: Zap, tint: "bg-yellow-50 text-yellow-700" },
+  Immigration: { icon: Stamp, tint: "bg-cyan-50 text-cyan-700" },
+  Labour: { icon: HardHat, tint: "bg-orange-50 text-orange-700" },
+  Education: { icon: GraduationCap, tint: "bg-indigo-50 text-indigo-700" },
+  Environment: { icon: Leaf, tint: "bg-green-50 text-green-700" },
+  "Social Security": { icon: HeartHandshake, tint: "bg-teal-50 text-teal-700" },
 };
 
 export function CategoryIcon({ category, size = 44 }: { category: string; size?: number }) {

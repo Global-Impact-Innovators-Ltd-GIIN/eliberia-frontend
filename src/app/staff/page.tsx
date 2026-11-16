@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { AlarmClock, ChevronRight, CircleDollarSign, FolderOpen, Hourglass, Inbox, ScrollText, Search, UserPlus, Users } from "lucide-react";
+import { AlarmClock, ChevronRight, CircleDollarSign, FolderOpen, Hourglass, Inbox, LayoutList, ScrollText, Search, UserPlus, Users } from "lucide-react";
+import ServiceAdmin from "@/components/ServiceAdmin";
 import { Skeleton, StatusBadge } from "@/components/ui";
 import { api, Application, fmtDate, fmtDateTime, STATUS_LABEL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -26,7 +27,7 @@ export default function Staff() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"queue" | "team" | "audit">("queue");
+  const [view, setView] = useState<"queue" | "services" | "team" | "audit">("queue");
   const [error, setError] = useState("");
   const [member, setMember] = useState({ full_name: "", phone: "", password: "", role: "agent", institution_id: "" });
   const [insts, setInsts] = useState<{ id: number; name: string }[]>([]);
@@ -79,8 +80,8 @@ export default function Staff() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><div className="eyebrow">{isAdmin ? "Administration" : "Staff desk"}</div><h1 className="mt-1 text-2xl font-extrabold sm:text-3xl">{user?.full_name || "…"}</h1></div>
         {isAdmin && (
-          <div className="flex rounded-xl border border-slate-200 bg-white p-1 text-sm font-semibold">
-            {([["queue", "Queue", Inbox], ["team", "Team", Users], ["audit", "Audit log", ScrollText]] as const).map(([v, l, Icon]) => (
+          <div className="flex max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 text-sm font-semibold">
+            {([["queue", "Queue", Inbox], ["services", "Services", LayoutList], ["team", "Team", Users], ["audit", "Audit log", ScrollText]] as const).map(([v, l, Icon]) => (
               <button key={v} onClick={() => setView(v)} aria-pressed={view === v} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${view === v ? "bg-navy-800 text-white" : "text-ink-700 hover:bg-slate-100"}`}><Icon size={15} /> {l}</button>
             ))}
           </div>
@@ -166,6 +167,8 @@ export default function Staff() {
           <button className="btn">Add {member.role}</button>
         </form>
       )}
+
+      {view === "services" && isAdmin && <ServiceAdmin insts={insts} />}
 
       {view === "audit" && isAdmin && (
         <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">

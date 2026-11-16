@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, BadgeCheck, CheckCircle2, Eye, FileText, Fingerprint, HandHelping, Phone, ScanFace, UserRound, Wallet, XCircle } from "lucide-react";
+import Messages from "@/components/Messages";
 import Timeline from "@/components/Timeline";
 import { Skeleton, StatusBadge } from "@/components/ui";
 import { API, api, Application, fmtDate, getToken, money } from "@/lib/api";
@@ -38,6 +39,15 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [reason, setReason] = useState("");
+  async function revoke() {
+    setError(""); setInfo(""); setBusy(true);
+    try {
+      await api(`/api/staff/certificates/${a!.certificate!.number}/revoke`, { method: "POST", json: { reason } });
+      setRevoking(false); setReason(""); setInfo("Certificate revoked. Anyone who checks it will now see it is invalid."); await load();
+    } catch (e: any) { setError(e.message); } finally { setBusy(false); }
+  }
 
   const load = useCallback(() => api<Application>(`/api/staff/applications/${params.id}`).then(setA).catch((e) => setError(e.message)), [params.id]);
   useEffect(() => {
@@ -143,6 +153,8 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
               {!a.biometrics?.length && <li className="muted">No identity evidence yet.</li>}
             </ul>
           </section>
+
+          <Messages appId={a.id} title="Messages with the applicant" />
         </div>
 
         <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
@@ -151,6 +163,16 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
             {a.certificate && (
               <Link href={`/verify/${a.certificate.number}`} className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100"><BadgeCheck size={17} /> Certificate {a.certificate.number}</Link>
             )}
+            {a.certificate && (a.certificate.revoked ? <p className="rounded-xl bg-flag-50 p-3 text-sm font-semibold text-flag-700">This certificate has been revoked.</p>
+              : !revoking ? <button className="text-sm font-semibold text-flag-700 hover:underline" onClick={() => setRevoking(true)}>Revoke this certificate</button>
+              : (
+                <div className="space-y-2 rounded-xl border border-flag-100 bg-flag-50 p-3">
+                  <label className="label" htmlFor="rr">Reason for revoking</label>
+                  <input id="rr" className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Issued in error" maxLength={200} />
+                  <div className="flex gap-2"><button className="btn btn-red" disabled={busy || reason.trim().length < 5} onClick={revoke}>Revoke</button>
+                    <button className="btn btn-ghost" onClick={() => setRevoking(false)}>Cancel</button></div>
+                </div>
+              ))}
             {error && <div className="alert alert-error" role="alert">{error}</div>}
             {info && <div className="alert alert-ok" role="status">{info}</div>}
             {actions.length ? (

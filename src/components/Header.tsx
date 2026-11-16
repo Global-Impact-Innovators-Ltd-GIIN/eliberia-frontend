@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronDown, LogOut, Menu, ShieldCheck, UserRound, X } from "lucide-react";
+import { BadgeCheck, ChevronDown, LogOut, Menu, ShieldCheck, UserRound, X } from "lucide-react";
+import Bell from "./Bell";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "./ui";
 
@@ -34,6 +35,8 @@ export default function Header() {
         <nav className="hidden items-center gap-1 md:flex">
           {links.map((l) => <Link key={l.href} href={l.href} className={cls(l.href)}>{l.label}</Link>)}
         </nav>
+        <div className="ml-auto flex items-center gap-2 md:ml-0">
+        {user && <Bell />}
         <div className="hidden items-center gap-2 md:flex">
           {user ? (
             <div className="relative">
@@ -46,6 +49,7 @@ export default function Header() {
               </button>
               {menu && (
                 <div className="absolute right-0 mt-2 w-52 animate-rise rounded-xl border border-slate-200 bg-white p-1.5 shadow-lift">
+                  {user.role === "citizen" && <Link href="/documents" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100"><BadgeCheck size={16} /> My documents</Link>}
                   <Link href="/account" className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100"><UserRound size={16} /> Account &amp; security</Link>
                   <button onClick={signOut} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-flag-700 hover:bg-flag-50"><LogOut size={16} /> Sign out</button>
                 </div>
@@ -58,6 +62,7 @@ export default function Header() {
             </>
           )}
         </div>
+        </div>
         <button className="rounded-lg p-2 md:hidden" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}>
           {open ? <X /> : <Menu />}
         </button>
@@ -68,6 +73,7 @@ export default function Header() {
             {links.map((l) => <Link key={l.href} href={l.href} className={cls(l.href)}>{l.label}</Link>)}
             {user ? (
               <>
+                {user.role === "citizen" && <Link href="/documents" className={cls("/documents")}>My documents</Link>}
                 <Link href="/account" className={cls("/account")}><ShieldCheck size={15} className="mr-1.5 inline" />Account &amp; security</Link>
                 <button onClick={signOut} className="rounded-lg px-3 py-2 text-left text-sm font-medium text-flag-700">Sign out</button>
               </>

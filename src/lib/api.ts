@@ -24,6 +24,7 @@ export type Application = {
   data?: Record<string, string>; events?: AppEvent[]; service_detail?: Service;
   documents?: { id: number; doc_type: string; filename: string }[];
   biometrics?: { id: number; kind: string; status: string; source: string; liveness_score?: number; match_score?: number; created_at?: string }[];
+  payments?: { id: number; method: string; amount_usd: number; status: string; txn_ref: string; created_at: string }[];
   certificate?: Certificate | null; feedback?: { rating: number; comment?: string } | null;
 };
 

@@ -17,6 +17,7 @@ export default function Footer() {
             <li><Link className="hover:text-white" href="/track">Track an application</Link></li>
             <li><Link className="hover:text-white" href="/verify">Verify a certificate</Link></li>
             <li><Link className="hover:text-white" href="/register">Create an account</Link></li>
+            <li><Link className="hover:text-white" href="/ussd">Use a basic phone (USSD)</Link></li>
           </ul>
         </div>
         <div>
