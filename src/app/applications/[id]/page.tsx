@@ -2,12 +2,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, BadgeCheck, CalendarClock, CheckCircle2, Copy, FileText, ScanFace, Send, Star as StarIcon, UploadCloud, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgeCheck, CalendarClock, CheckCircle2, Copy, Eye, FileText, LockKeyhole, ScanFace, Send, Sparkles, Star as StarIcon, UploadCloud, Wallet } from "lucide-react";
+import IdentityField from "@/components/IdentityField";
 import FaceCapture from "@/components/FaceCapture";
 import Messages from "@/components/Messages";
 import Timeline from "@/components/Timeline";
 import { Skeleton, StatusBadge, Stepper } from "@/components/ui";
-import { api, Application, fmtDate, money } from "@/lib/api";
+import { api, Application, DocRule, fmtDate, fmtDateTime, fmtFormats, money } from "@/lib/api";
+import { displayAnswer, fieldProblem, useIdentityMeta } from "@/lib/identity";
+
+type Access = { viewer_name: string; viewer_role: string; organisation: string; what: string; created_at: string };
 import { useAuth } from "@/lib/auth";
 
 export default function ApplicationPage({ params }: { params: { id: string } }) {
@@ -25,6 +29,9 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   const [appt, setAppt] = useState({ center: "", slot: "" });
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  const [prefilled, setPrefilled] = useState(0);
+  const [access, setAccess] = useState<Access[] | null>(null);
+  const meta = useIdentityMeta();
 
   const load = useCallback(async () => {
     try {
@@ -37,7 +44,16 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   useEffect(() => {
     if (loading) return;
     if (!user) { router.push("/login"); return; }
-    load();
+    load().then(async (r) => {
+      if (!r) return;
+      if (r.status === "draft" && !Object.keys(r.data || {}).length) {
+        // reuse what we already know about this person so they never type it twice
+        const pre = await api<{ values: Record<string, string> }>(`/api/applications/${params.id}/prefill`).catch(() => null);
+        const n = pre ? Object.keys(pre.values).filter((k) => !k.includes("__")).length : 0;
+        if (pre && n) { setData(pre.values); setPrefilled(n); }
+      }
+      if (user.role === "citizen" && r.status !== "draft") api<Access[]>(`/api/applications/${params.id}/access`).then(setAccess).catch(() => {});
+    });
     api<string[]>("/api/centers").then(setCenters).catch(() => {});
   }, [user, loading, router, load]);
 
@@ -59,23 +75,28 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
   const hasFee = s.fee_usd > 0;
   const steps = ["Your details", ...(s.required_documents.length ? ["Documents"] : []), ...(hasFee ? ["Payment"] : []), "Review"];
   const cur = steps[Math.min(step, steps.length - 1)];
-  const missing = s.form_fields.filter((f) => f.required && !String(data[f.name] || "").trim()).map((f) => f.label);
+  const problems = s.form_fields.map((f) => fieldProblem(f, data, meta)).filter(Boolean) as string[];
   const docsDone = a.documents?.length || 0;
-  const docsOk = docsDone >= s.required_documents.length;
+  const docFor = (name: string) => a.documents?.find((d) => d.doc_type === name);
+  const docsOk = s.required_documents.every((r) => !r.required || docFor(r.name));
 
   const save = () => api(`/api/applications/${params.id}`, { method: "PUT", json: { data } });
   const next = async () => {
     if (cur === "Your details") {
-      if (missing.length) { setError(`Please fill in: ${missing.join(", ")}`); return; }
+      if (problems.length) { setError(problems.slice(0, 3).join(" ")); return; }
       if (!(await run(save))) return;
     }
     if (cur === "Documents" && !docsOk) { setError("Please upload every required document."); return; }
     if (cur === "Payment" && !a.paid) { setError("Complete the payment to continue."); return; }
     setError(""); setInfo(""); setStep(step + 1);
   };
-  const upload = (docType: string, file: File) => {
-    const fd = new FormData(); fd.append("file", file); fd.append("doc_type", docType);
-    return run(() => api(`/api/applications/${params.id}/documents`, { method: "POST", body: fd }), `${docType} uploaded`);
+  const upload = (rule: DocRule, file: File) => {
+    // check the institution's rules before sending anything
+    const ext = (file.name.split(".").pop() || "").toLowerCase().replace("jpeg", "jpg");
+    if (!rule.formats.includes(ext)) { setInfo(""); setError(`"${rule.name}" must be a ${rule.formats.map((f) => f.toUpperCase()).join(", ")} file. You chose a .${ext} file.`); return; }
+    if (file.size > rule.max_mb * 1024 * 1024) { setInfo(""); setError(`"${rule.name}" must be ${rule.max_mb} MB or smaller. Yours is ${(file.size / 1048576).toFixed(1)} MB.`); return; }
+    const fd = new FormData(); fd.append("file", file); fd.append("doc_type", rule.name);
+    return run(() => api(`/api/applications/${params.id}/documents`, { method: "POST", body: fd }), `${rule.name} uploaded`);
   };
   const pay = () => run(async () => {
     const p = await api(`/api/applications/${params.id}/pay`, { method: "POST", json: { method } });
@@ -122,16 +143,28 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
               <div className="mt-6 animate-rise" key={cur}>
                 {cur === "Your details" && (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {s.form_fields.map((f) => (
-                      <div key={f.name} className={f.type === "text" && s.form_fields.length % 2 === 1 && f === s.form_fields[0] ? "sm:col-span-2" : ""}>
+                    {prefilled > 0 && (
+                      <div className="alert alert-info sm:col-span-2"><Sparkles size={17} className="mt-0.5 shrink-0" />
+                        <span>We filled in {prefilled} answer{prefilled > 1 ? "s" : ""} from your profile and earlier applications. Please check they are still correct.</span></div>
+                    )}
+                    {s.form_fields.map((f) => f.type === "identity" ? (
+                      <div key={f.name} className="sm:col-span-2">
+                        <span className="label">{f.label}</span>
+                        <IdentityField field={f} data={data} meta={meta} onChange={(patch) => setData({ ...data, ...patch })} />
+                      </div>
+                    ) : (
+                      <div key={f.name}>
                         <label className="label" htmlFor={f.name}>{f.label}{f.required ? <span className="text-flag-600"> *</span> : <span className="font-normal text-ink-500"> (optional)</span>}</label>
-                        {f.type === "select" ? (
+                        {f.type === "select" || f.type === "country" ? (
                           <select id={f.name} className="input" value={data[f.name] || ""} onChange={(e) => setData({ ...data, [f.name]: e.target.value })}>
-                            <option value="">Select…</option>{f.options?.map((o) => <option key={o}>{o}</option>)}
+                            <option value="">Select…</option>
+                            {f.type === "country" ? meta?.countries.map((c) => <option key={c.code} value={c.code}>{c.name}</option>) : f.options?.map((o) => <option key={o}>{o}</option>)}
                           </select>
                         ) : (
-                          <input id={f.name} className="input" type={f.type} value={data[f.name] || ""} onChange={(e) => setData({ ...data, [f.name]: e.target.value })} />
+                          <input id={f.name} className="input" type={f.type === "phone" ? "tel" : f.type} inputMode={f.type === "phone" ? "tel" : undefined}
+                            maxLength={f.max_length || 300} value={data[f.name] || ""} onChange={(e) => setData({ ...data, [f.name]: e.target.value })} />
                         )}
+                        {f.help && <p className="mt-1 text-xs text-ink-500">{f.help}</p>}
                       </div>
                     ))}
                   </div>
@@ -139,13 +172,20 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
 
                 {cur === "Documents" && (
                   <div className="space-y-3">
-                    {s.required_documents.map((d, i) => {
-                      const up = a.documents?.[i];
+                    <p className="muted">{s.institution.name} sets the format and size it accepts for each document.</p>
+                    {s.required_documents.map((d) => {
+                      const up = docFor(d.name);
                       return (
-                        <label key={d} className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed p-4 transition ${up ? "border-emerald-300 bg-emerald-50/50" : "border-ink-300 hover:border-navy-400 hover:bg-navy-50/50"}`}>
+                        <label key={d.name} className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 border-dashed p-4 transition ${up ? "border-emerald-300 bg-emerald-50/50" : "border-ink-300 hover:border-navy-400 hover:bg-navy-50/50"}`}>
                           <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${up ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-ink-500"}`}>{up ? <CheckCircle2 size={20} /> : <UploadCloud size={20} />}</span>
-                          <span className="min-w-0 flex-1"><span className="block font-medium">{d}</span><span className="muted block truncate">{up ? up.filename : "Tap to choose a PDF, JPG or PNG (max 8 MB)"}</span></span>
-                          <input type="file" className="sr-only" accept=".pdf,.png,.jpg,.jpeg" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(d, e.target.files[0])} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium">{d.name}{!d.required && <span className="font-normal text-ink-500"> (optional)</span>}</span>
+                            <span className="block text-xs font-semibold text-navy-800">{fmtFormats(d)}</span>
+                            {d.note && <span className="block text-xs text-ink-500">{d.note}</span>}
+                            <span className="muted mt-1 block truncate">{up ? `Uploaded: ${up.filename} - tap to replace` : "Tap to choose a file"}</span>
+                          </span>
+                          <input type="file" className="sr-only" accept={d.formats.map((f) => (f === "jpg" ? ".jpg,.jpeg" : `.${f}`)).join(",")} disabled={busy}
+                            onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) upload(d, file); }} />
                         </label>
                       );
                     })}
@@ -182,7 +222,7 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
                 {cur === "Review" && (
                   <div className="space-y-4">
                     <dl className="grid gap-x-6 gap-y-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-                      {s.form_fields.map((f) => <div key={f.name}><dt className="text-ink-500">{f.label}</dt><dd className="font-medium">{data[f.name] || "—"}</dd></div>)}
+                      {s.form_fields.map((f) => <div key={f.name}><dt className="text-ink-500">{f.label}</dt><dd className="font-medium">{displayAnswer(f, data, meta) || "—"}</dd></div>)}
                     </dl>
                     <ul className="space-y-1.5 text-sm">
                       <li className="flex items-center gap-2"><FileText size={15} className="text-navy-600" /> {docsDone} document(s) attached</li>
@@ -233,12 +273,28 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
               <section className="card">
                 <h2 className="font-bold">What you submitted</h2>
                 <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                  {s.form_fields.map((f) => <div key={f.name}><dt className="text-ink-500">{f.label}</dt><dd className="font-medium">{data[f.name] || "—"}</dd></div>)}
+                  {s.form_fields.map((f) => <div key={f.name}><dt className="text-ink-500">{f.label}</dt><dd className="font-medium">{displayAnswer(f, data, meta) || "—"}</dd></div>)}
                 </dl>
                 {!!a.documents?.length && <ul className="mt-4 flex flex-wrap gap-2">{a.documents.map((d) => <li key={d.id} className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs"><FileText size={13} /> {d.filename}</li>)}</ul>}
               </section>
 
               <Messages appId={a.id} title={`Messages with ${s.institution.code}`} />
+
+              {user?.role === "citizen" && access !== null && (
+                <section className="card">
+                  <h2 className="flex items-center gap-2 font-bold"><Eye size={18} /> Who has opened your application</h2>
+                  <p className="muted mt-1">Every time an official looks at your file it is recorded here, so you always know who has seen your information.</p>
+                  <ul className="mt-3 divide-y divide-slate-100 text-sm">
+                    {access.map((x, i) => (
+                      <li key={i} className="flex flex-wrap justify-between gap-x-4 py-2.5">
+                        <span><b>{x.viewer_name}</b> · {x.organisation}<span className="block text-ink-500">{x.what}</span></span>
+                        <span className="text-xs text-ink-500">{fmtDateTime(x.created_at)}</span>
+                      </li>
+                    ))}
+                    {!access.length && <li className="muted py-2">No official has opened it yet.</li>}
+                  </ul>
+                </section>
+              )}
 
               {!isAgent && ["approved", "ready_for_collection", "completed", "rejected"].includes(a.status) && (
                 <section className="card">
@@ -263,6 +319,10 @@ export default function ApplicationPage({ params }: { params: { id: string } }) 
         </div>
 
         <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <div className="flex gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <LockKeyhole size={18} className="mt-0.5 shrink-0" />
+            <span>Your answers and documents are encrypted. Only {s.institution.name} staff handling this request can open them.</span>
+          </div>
           <div className="card">
             <h2 className="mb-4 font-bold">Progress</h2>
             <Timeline events={a.events || []} />

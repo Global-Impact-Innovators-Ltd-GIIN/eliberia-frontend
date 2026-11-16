@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CheckCircle2, ChevronRight, Clock, FileText, Fingerprint, Landmark, ScanFace, Users, UserRound, Wallet } from "lucide-react";
 import { CategoryIcon, Skeleton } from "@/components/ui";
-import { api, money, Service } from "@/lib/api";
+import { api, fmtFormats, money, Service } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 export default function ServiceDetail({ params }: { params: { code: string } }) {
@@ -76,10 +76,23 @@ export default function ServiceDetail({ params }: { params: { code: string } }) 
           <section className="card">
             <h2 className="font-bold">Have these ready</h2>
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-              {s.required_documents.map((d) => <li key={d} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm"><FileText size={16} className="text-navy-600" /> {d}</li>)}
+              {s.required_documents.map((d) => (
+                <li key={d.name} className="rounded-xl bg-slate-50 px-3 py-2.5 text-sm">
+                  <div className="flex items-center gap-2 font-medium"><FileText size={16} className="shrink-0 text-navy-600" /> {d.name}{!d.required && <span className="font-normal text-ink-500">(optional)</span>}</div>
+                  <div className="mt-1 text-xs font-semibold text-navy-800">{fmtFormats(d)}</div>
+                  {d.note && <div className="mt-0.5 text-xs text-ink-500">{d.note}</div>}
+                </li>
+              ))}
             </ul>
-            <p className="muted mt-3">Clear photos or PDF scans, up to 8 MB each.</p>
+            {!s.required_documents.length && <p className="muted mt-2">No documents are needed for this service.</p>}
           </section>
+          {(s.institution.guidelines || s.institution.contact_phone || s.institution.contact_email) && (
+          <section className="card">
+            <h2 className="font-bold">From the {s.institution.name}</h2>
+            {s.institution.guidelines && <p className="mt-2 whitespace-pre-wrap text-ink-700">{s.institution.guidelines}</p>}
+            <p className="muted mt-3">{[s.institution.contact_phone, s.institution.contact_email].filter(Boolean).join(" · ")}</p>
+          </section>
+          )}
         </div>
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="card space-y-4">

@@ -1,14 +1,20 @@
 export const API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").trim();
 
 export type User = {
-  id: number; full_name: string; phone: string; role: "citizen" | "officer" | "admin" | "agent";
+  id: number; full_name: string; phone: string; role: "citizen" | "officer" | "admin" | "agent" | "inst_admin";
+  perms?: string[] | null; nationality?: string | null; id_doc_type?: string | null; id_number?: string | null;
   nin?: string; email?: string; county?: string; dob?: string; institution_id?: number;
 };
-export type Field = { name: string; label: string; type: string; required: boolean; options?: string[] };
+export type Field = {
+  name: string; label: string; type: string; required: boolean; options?: string[];
+  help?: string; max_length?: number; doc_types?: string[]; countries?: string[];
+};
+export type DocRule = { name: string; formats: string[]; max_mb: number; required: boolean; note: string };
+export type Institution = { id: number; code: string; name: string; description?: string; guidelines?: string; contact_phone?: string; contact_email?: string };
 export type Service = {
   id: number; code: string; name: string; category: string; description: string;
-  institution: { id: number; code: string; name: string }; fee_usd: number; sla_days: number;
-  requires_face: boolean; requires_fingerprint: boolean; required_documents: string[]; form_fields: Field[];
+  institution: Institution; fee_usd: number; sla_days: number;
+  requires_face: boolean; requires_fingerprint: boolean; required_documents: DocRule[]; form_fields: Field[];
 };
 export type AppEvent = { status: string; message: string; actor?: string; created_at: string };
 export type Certificate = {
@@ -57,6 +63,9 @@ export async function api<T = any>(path: string, opts: RequestInit & { json?: un
 }
 
 export const homeFor = (role: User["role"]) => (role === "citizen" ? "/dashboard" : role === "agent" ? "/agent" : "/staff");
+export const isReviewer = (role?: User["role"]) => role === "officer" || role === "inst_admin" || role === "admin";
+export const can = (u: User | null | undefined, perm: string) => !!u && u.role === "admin" && (!u.perms || u.perms.includes("all") || u.perms.includes(perm));
+export const fmtFormats = (r: DocRule) => `${r.formats.map((f) => f.toUpperCase()).join(", ")} · up to ${r.max_mb} MB`;
 export const money = (n: number) => (n > 0 ? `$${n.toFixed(2)}` : "Free");
 export const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso.endsWith("Z") ? iso : iso + "Z").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "-";

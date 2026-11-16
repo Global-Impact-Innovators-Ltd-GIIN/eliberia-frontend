@@ -6,7 +6,8 @@ import { ArrowLeft, BadgeCheck, CheckCircle2, Eye, FileText, Fingerprint, HandHe
 import Messages from "@/components/Messages";
 import Timeline from "@/components/Timeline";
 import { Skeleton, StatusBadge } from "@/components/ui";
-import { API, api, Application, fmtDate, getToken, money } from "@/lib/api";
+import { API, api, Application, fmtDate, getToken, isReviewer, money } from "@/lib/api";
+import { displayAnswer, useIdentityMeta } from "@/lib/identity";
 import { useAuth } from "@/lib/auth";
 
 type Act = { action: string; label: string; hint: string; note?: "required" | "optional"; tone?: "red" | "ghost" };
@@ -39,6 +40,7 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const meta = useIdentityMeta();
   const [revoking, setRevoking] = useState(false);
   const [reason, setReason] = useState("");
   async function revoke() {
@@ -53,7 +55,7 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
   useEffect(() => {
     if (loading) return;
     if (!user) { router.push("/login"); return; }
-    if (user.role !== "officer" && user.role !== "admin") { router.push(user.role === "agent" ? "/agent" : "/dashboard"); return; }
+    if (!isReviewer(user.role)) { router.push(user.role === "agent" ? "/agent" : "/dashboard"); return; }
     load();
   }, [user, loading, router, load]);
 
@@ -116,7 +118,8 @@ export default function StaffDetail({ params }: { params: { id: string } }) {
           <section className="card">
             <h2 className="font-bold">Submitted details</h2>
             <dl className="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-              {Object.entries(a.data || {}).map(([k, v]) => <div key={k}><dt className="text-ink-500">{labelOf(k)}</dt><dd className="mt-0.5 font-medium">{String(v) || "—"}</dd></div>)}
+              {fields.map((f) => <div key={f.name}><dt className="text-ink-500">{f.label}</dt><dd className="mt-0.5 font-medium">{displayAnswer(f, a.data || {}, meta) || "—"}</dd></div>)}
+              {Object.entries(a.data || {}).filter(([k]) => !k.includes("__") && !fields.some((f) => f.name === k)).map(([k, v]) => <div key={k}><dt className="text-ink-500">{labelOf(k)}</dt><dd className="mt-0.5 font-medium">{String(v) || "—"}</dd></div>)}
               {!Object.keys(a.data || {}).length && <p className="muted">No details were provided.</p>}
             </dl>
           </section>

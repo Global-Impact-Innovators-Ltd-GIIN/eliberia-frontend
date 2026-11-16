@@ -1,7 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { KeyRound, LogOut, MonitorSmartphone, UserRound } from "lucide-react";
+import { Download, IdCard, KeyRound, LockKeyhole, LogOut, MonitorSmartphone, UserRound } from "lucide-react";
+import IdentityField from "@/components/IdentityField";
+import { identityState, useIdentityMeta } from "@/lib/identity";
 import { PasswordInput, StrengthMeter, strength } from "@/components/AuthShell";
 import { api, fmtDateTime, setToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -23,11 +25,15 @@ export default function Account() {
   const [acts, setActs] = useState<Act[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [idv, setIdv] = useState<Record<string, string>>({});
+  const meta = useIdentityMeta();
+  const idField = { name: "id_number", label: "Identity document", type: "identity", required: false };
 
   useEffect(() => {
     if (loading) return;
     if (!user) { router.push("/login"); return; }
     setP({ full_name: user.full_name, email: user.email || "", county: user.county || "" });
+    setIdv({ id_number: user.id_number || "", id_number__country: user.nationality || "", id_number__doc: user.id_doc_type || "" });
     api<Act[]>("/api/auth/activity").then(setActs).catch(() => {});
   }, [user, loading, router]);
 
@@ -44,6 +50,16 @@ export default function Account() {
     setToken(r.token); setPw({ current_password: "", new_password: "" });
     return "Password changed. Other devices were signed out.";
   }); };
+  const saveIdentity = (e: React.FormEvent) => { e.preventDefault(); run(async () => {
+    const st = identityState(idField, idv, meta);
+    const u = await api("/api/auth/me", { method: "PATCH", json: { nationality: st.country, id_doc_type: st.doc, id_number: st.number } });
+    login(localStorage.getItem("eliberia_token") || "", u); return "Identity document saved. We will fill it in for you on future applications.";
+  }); };
+  const exportData = () => run(async () => {
+    const blob = new Blob([JSON.stringify(await api("/api/me/export"), null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "my-eliberia-data.json"; a.click();
+    URL.revokeObjectURL(a.href); return "Your data file was downloaded.";
+  });
   const logoutAll = () => run(async () => { await api("/api/auth/logout-all", { method: "POST" }); logout(); router.push("/login"); return "Signed out."; });
 
   if (!user) return null;
@@ -70,6 +86,26 @@ export default function Account() {
             <StrengthMeter pw={pw.new_password} /></div>
           <button className="btn" disabled={busy || strength(pw.new_password) < 2}>Change password</button>
         </form>
+
+        {user.role === "citizen" && (
+          <form onSubmit={saveIdentity} className="card space-y-4 lg:col-span-2">
+            <h2 className="flex items-center gap-2 font-bold"><IdCard size={18} /> Identity document</h2>
+            <p className="muted">Save it once. Services that ask for your National ID or passport will fill it in for you, and it is checked against your country&apos;s format.</p>
+            <div className="grid sm:grid-cols-2"><IdentityField field={idField} data={idv} meta={meta} onChange={(patch) => setIdv({ ...idv, ...patch })} /></div>
+            <button className="btn" disabled={busy || (!!idv.id_number && !identityState(idField, idv, meta).valid)}>Save identity document</button>
+          </form>
+        )}
+
+        {user.role === "citizen" && (
+          <div className="card flex flex-wrap items-center gap-4 lg:col-span-2">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><LockKeyhole size={22} /></span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-bold">Your data, under your control</h2>
+              <p className="muted">Your answers, documents and photos are encrypted. Each application shows which official opened it. You can download everything eLiberia holds about you.</p>
+            </div>
+            <button className="btn btn-ghost" onClick={exportData} disabled={busy}><Download size={16} /> Download my data</button>
+          </div>
+        )}
 
         <div className="card lg:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
